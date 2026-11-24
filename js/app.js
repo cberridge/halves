@@ -451,11 +451,8 @@ document.addEventListener('click', async (ev) => {
       try { await backend.resetPassword(email); toast('Password reset email sent'); } catch (err) { $('#auth-error').textContent = friendlyError(err); }
       return;
     }
-    case 'create-household': {
-      state.busy = true; render();
-      try { await backend.createHousehold(state.user); } catch (err) { toast(friendlyError(err)); }
-      state.busy = false; return render();
-    }
+    // Fire-and-forget: the household snapshot switches to the main view from the local cache.
+    case 'create-household': return write(backend.createHousehold(state.user));
     case 'sign-out': $('#menu-sheet').close(); return backend.signOut();
     case 'open-menu': return openMenu();
     case 'share-invite': return shareInvite();
@@ -484,13 +481,21 @@ document.addEventListener('submit', async (ev) => {
     state.busy = true;
     ev.target.querySelector('[type=submit]').disabled = true;
     try {
-      if (state.authMode === 'signup') await backend.signUp(f.name.value.trim(), email, password);
-      else await backend.signIn(email, password);
+      if (state.authMode === 'signup') {
+        const name = f.name.value.trim();
+        const user = await backend.signUp(name, email, password);
+        // watchAuth fired before the display name was saved, so patch it in.
+        if (state.user && state.user.uid === user.uid) state.user.name = name;
+      } else {
+        await backend.signIn(email, password);
+      }
+      state.busy = false;
+      // watchAuth rendered the next screen while busy was still true; redraw so its buttons are enabled.
+      render();
     } catch (e) {
+      state.busy = false;
       err.textContent = friendlyError(e);
       ev.target.querySelector('[type=submit]').disabled = false;
-    } finally {
-      state.busy = false;
     }
   }
 

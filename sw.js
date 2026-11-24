@@ -1,7 +1,7 @@
 // Service worker: caches the app shell so Halves opens instantly and works offline.
 // Firestore handles data offline itself, so API traffic is never intercepted here.
 // Bump VERSION whenever you deploy, so phones pick up the new files.
-const VERSION = 'halves-v1';
+const VERSION = 'halves-v2';
 const SHELL = [
   './',
   './index.html',

@@ -30,7 +30,7 @@ Everything Halves uses is on Firebase's free Spark plan. Two people splitting bi
 2. From this folder, push it:
    ```bash
    git init -b main && git add -A && git commit -m "Halves v1"
-   git remote add origin git@github.com:<you>/halves.git
+   git remote add origin git@github.com:cberridge/halves.git
    git push -u origin main
    ```
 3. On GitHub, go to **Settings → Pages**, set **Source: Deploy from a branch**, **Branch: `main` / `(root)`**, and save. After a minute it's live at `https://<you>.github.io/halves/`.
