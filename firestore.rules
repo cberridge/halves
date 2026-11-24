@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// Paste into Firebase console → Firestore Database → Rules, then Publish.
+// Model: households/{hid} holds exactly two members; entries live under it.
+// The household ID doubles as the invite code, so it's readable by any signed-in user who knows it.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function household(hid) { return get(/databases/$(database)/documents/households/$(hid)).data; }
+    function isMember(hid) { return signedIn() && request.auth.uid in household(hid).members; }
+
+    match /households/{hid} {
+      // get by ID = following an invite; list = finding your own household.
+      allow get: if signedIn();
+      allow list: if signedIn() && request.auth.uid in resource.data.members;
+
+      allow create: if signedIn()
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.keys().hasOnly(['members', 'names', 'createdAt'])
+        && request.resource.data.names.keys().hasOnly([request.auth.uid]);
+
+      // Joining: a second person adds only themselves and their own name.
+      allow update: if signedIn()
+        && resource.data.members.size() == 1
+        && !(request.auth.uid in resource.data.members)
+        && request.resource.data.members == resource.data.members.concat([request.auth.uid])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'names'])
+        && request.resource.data.names.diff(resource.data.names).affectedKeys().hasOnly([request.auth.uid]);
+
+      // Members may change their own display name.
+      allow update: if isMember(hid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['names'])
+        && request.resource.data.names.diff(resource.data.names).affectedKeys().hasOnly([request.auth.uid]);
+
+      allow delete: if false;
+
+      match /entries/{eid} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid) && validEntry(household(hid).members, request.resource.data);
+      }
+    }
+
+    // Amount in integer pence; shares cover both members and add up to the amount.
+    function validEntry(members, d) {
+      return members.size() == 2
+        && d.keys().hasOnly(['kind', 'description', 'amount', 'paidBy', 'shares', 'split', 'date', 'createdBy', 'createdAt', 'updatedAt'])
+        && d.kind in ['expense', 'settlement']
+        && d.description is string && d.description.size() > 0 && d.description.size() <= 120
+        && d.amount is int && d.amount > 0 && d.amount <= 10000000
+        && d.paidBy in members
+        && d.date is string && d.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && d.shares is map && d.shares.keys().hasOnly(members)
+        && d.shares.get(members[0], 0) is int && d.shares.get(members[1], 0) is int
+        && d.shares.get(members[0], 0) >= 0 && d.shares.get(members[1], 0) >= 0
+        && d.shares.get(members[0], 0) + d.shares.get(members[1], 0) == d.amount;
+    }
+  }
+}
